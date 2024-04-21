@@ -4,7 +4,7 @@ fn main() {
     const NODES: usize = 20;
     let mut intensity = [[0; NODES]; NODES];
 
-    let mut graph = UnGraph::new_undirected();
+    let mut graph = UnGraph::<usize,usize>::with_capacity(NODES,30);
     let mut nodes = Vec::new();
     for _ in 0..NODES {
         nodes.push(graph.add_node(0));
@@ -81,14 +81,14 @@ fn main() {
         }
     }
 
-    let mut real_intensity = [[0; NODES]; NODES];
+    let mut flow = [[0; NODES]; NODES];
 
     {
         let mut inc_real_intensity = |index1: usize, index2: usize, value: i32| {
             if index1 < index2 {
-                real_intensity[index1][index2] += value;
+                flow[index1][index2] += value;
             } else {
-                real_intensity[index2][index1] += value;
+                flow[index2][index1] += value;
             }
         };
 
@@ -109,7 +109,7 @@ fn main() {
         }
     }
 
-    let display_matrix = |matrix: &[[i32; NODES];NODES]| {
+    let display_matrix = |matrix: &[[i32; NODES]; NODES]| {
         for i in 0..matrix.len() {
             for j in 0..matrix[i].len() {
                 let val = matrix[i][j];
@@ -120,7 +120,7 @@ fn main() {
         }
     };
 
-    display_matrix(&real_intensity);
+    display_matrix(&flow);
 }
 
 
