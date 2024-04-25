@@ -1,5 +1,5 @@
 use colored::Colorize;
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, info, LevelFilter, trace, warn};
 use ndarray::{Array2, ArrayBase, Ix2, OwnedRepr};
 use petgraph::algo::astar;
 use petgraph::prelude::{EdgeRef, NodeIndex, StableGraph, StableUnGraph};
@@ -7,13 +7,16 @@ use petgraph::Undirected;
 use petgraph::visit::IntoEdgeReferences;
 
 use rand::distributions::{Distribution, Uniform};
+use rand::{Rng, thread_rng};
 
 const NODES: usize = 20;
 
 fn main() {
-    env_logger::init();
+    // env_logger::init();
+    env_logger::builder().filter_level(LevelFilter::Debug).init();
     // let mut intensity = [[0usize; NODES]; NODES];
 
+    info!("Constructing graph");
     let mut graph = StableUnGraph::<u8, Connection>::with_capacity(NODES, 30);
     trace!("Graph created");
 
@@ -23,7 +26,7 @@ fn main() {
     }
     trace!("Nodes added");
 
-    set_edges2(&mut graph, &nodes);
+    set_edges(&mut graph, &nodes);
 
     let mut intensity = Array2::<usize>::zeros((NODES, NODES));
     set_intensity(&mut intensity);
@@ -31,9 +34,10 @@ fn main() {
     set_flow(&mut graph, &nodes, &intensity);
     test_network(&graph, &intensity);
 
-    experiment1(&graph, &nodes, &intensity);
-    experiment2(&graph, &nodes, &intensity);
-    experiment3(&graph, &nodes, &intensity);
+    // monte_carlo();
+    // experiment1();
+    // experiment2();
+    // experiment3();
 
 
     // random_disconnect(&mut graph);
@@ -42,55 +46,28 @@ fn main() {
     // test_network(&graph, &intensity);
 }
 
-fn experiment1(graph: &StableGraph<u8, Connection, Undirected>, nodes: &Vec<NodeIndex>, intensity: &ArrayBase<OwnedRepr<usize>, Ix2>) {
-    warn!("{}", "Experiment 1".yellow());
-    let mut intensity = intensity.clone();
-    let mut graph = graph.clone();
-    for i in 0..20 {
-        debug!("Iteration {}", i);
-        intensity.mapv_inplace(|x| (x as f64 * 1.1) as usize);
 
-        let mut graph = graph.clone();
-        random_disconnect(&mut graph);
-        reset_flow(&mut graph);
-        set_flow(&mut graph, nodes, &intensity);
-        test_network(&graph, &intensity);
+fn init_graph() -> (StableGraph<u8, Connection, Undirected>, Vec<NodeIndex>, ArrayBase<OwnedRepr<usize>, Ix2>) {
+    let _ = env_logger::builder().filter_level(LevelFilter::Debug).is_test(true).try_init();
+    // let mut intensity = [[0usize; NODES]; NODES];
+
+    info!("Constructing graph");
+    let mut graph = StableUnGraph::<u8, Connection>::with_capacity(NODES, 30);
+    trace!("Graph created");
+
+    let mut nodes = Vec::new();
+    for _ in 0..NODES {
+        nodes.push(graph.add_node(0));
     }
+    trace!("Nodes added");
+
+    set_edges(&mut graph, &nodes);
+
+    let mut intensity = Array2::<usize>::zeros((NODES, NODES));
+    set_intensity(&mut intensity);
+    (graph, nodes, intensity)
 }
 
-fn experiment2(graph: &StableGraph<u8, Connection, Undirected>, nodes: &Vec<NodeIndex>, intensity: &ArrayBase<OwnedRepr<usize>, Ix2>) {
-    warn!("{}", "Experiment 2".yellow());
-    let mut graph = graph.clone();
-    for i in 0..20 {
-        debug!("Iteration {}", i);
-        graph.edge_weights_mut().for_each(|x| x.bandwidth = (x.bandwidth as f64 * 1.1) as usize);
-
-        let mut graph = graph.clone();
-        random_disconnect(&mut graph);
-        reset_flow(&mut graph);
-        set_flow(&mut graph, nodes, intensity);
-        test_network(&graph, intensity);
-    }
-}
-
-fn experiment3(graph: &StableGraph<u8, Connection, Undirected>, nodes: &Vec<NodeIndex>, intensity: &ArrayBase<OwnedRepr<usize>, Ix2>) {
-    warn!("{}", "Experiment 3".yellow());
-    let mut graph = graph.clone();
-    let average = graph.edge_references().fold(0., |acc, x| acc + x.weight().bandwidth as f64) / graph.edge_count() as f64;
-    let mut rng = rand::thread_rng();
-    let range = Uniform::new(0, NODES);
-    for i in 0..20 {
-        debug!("Iteration {}", i);
-        graph.add_edge(nodes[range.sample(&mut rng)], nodes[range.sample(&mut rng)], Connection::new(average as usize));
-
-
-        let mut graph = graph.clone();
-        random_disconnect(&mut graph);
-        reset_flow(&mut graph);
-        set_flow(&mut graph, nodes, intensity);
-        test_network(&graph, intensity);
-    }
-}
 
 fn random_disconnect(graph: &mut StableGraph<u8, Connection, Undirected>) {
     let mut rng = rand::thread_rng();
@@ -107,14 +84,14 @@ fn random_disconnect(graph: &mut StableGraph<u8, Connection, Undirected>) {
     trace!("Checked for failing connections");
 }
 
-fn test_network(graph: &StableUnGraph<u8, Connection>, intensity: &Array2<usize>) {
+fn test_network(graph: &StableUnGraph<u8, Connection>, intensity: &Array2<usize>) -> f64 {
     let mut sum_e = 0.;
     let mut over = 0;
     for e in graph.edge_references() {
         let weight = e.weight();
         let (a, c) = (weight.flow as f64, weight.bandwidth as f64);
         let mut val = 1.;
-        let msg = if a <= c {
+        let _msg = if a <= c {
             val = c - a;
             "Flow Good".green()
         } else {
@@ -130,7 +107,8 @@ fn test_network(graph: &StableUnGraph<u8, Connection>, intensity: &Array2<usize>
         warn!("{} Connections overloaded", over);
     }
     let t = 1. / intensity.sum() as f64 * sum_e;
-    info!("Value T: {}", t);
+    debug!("Value T: {}", t);
+    t
 }
 
 fn set_edges(graph: &mut StableUnGraph<u8, Connection>, nodes: &Vec<NodeIndex>) {
@@ -153,6 +131,13 @@ fn set_edges(graph: &mut StableUnGraph<u8, Connection>, nodes: &Vec<NodeIndex>) 
     graph.add_edge(nodes[13], nodes[17], Connection::new(10_000));
     graph.add_edge(nodes[17], nodes[18], Connection::new(1000));
     graph.add_edge(nodes[17], nodes[19], Connection::new(1000));
+
+    graph.add_edge(nodes[3], nodes[5], Connection::new(10_000));
+    graph.add_edge(nodes[3], nodes[10], Connection::new(10_000));
+    graph.add_edge(nodes[5], nodes[14], Connection::new(10_000));
+    graph.add_edge(nodes[14], nodes[17], Connection::new(10_000));
+    graph.add_edge(nodes[10], nodes[17], Connection::new(10_000));
+
     trace!("Edges added");
 }
 
@@ -228,7 +213,7 @@ fn reset_flow(graph: &mut StableUnGraph<u8, Connection>) {
     }
 }
 
-fn set_flow(graph: &mut StableUnGraph<u8, Connection>, nodes: &Vec<NodeIndex>, intensity: &Array2<usize>) {
+fn set_flow(graph: &mut StableUnGraph<u8, Connection>, nodes: &Vec<NodeIndex>, intensity: &Array2<usize>) -> bool {
     let mut disconnected = 0;
     for i in 0..NODES {
         for j in (i + 1)..NODES {
@@ -246,9 +231,12 @@ fn set_flow(graph: &mut StableUnGraph<u8, Connection>, nodes: &Vec<NodeIndex>, i
         }
     }
     trace!("Flow set, Disconnected pairs of nodes: {}", disconnected);
-    if disconnected > 0 {
-        error!("{}", "Network disjointed!");
-    }
+    return if disconnected > 0 {
+        warn!("{}", "Network disjointed!");
+        false
+    } else {
+        true
+    };
 }
 
 struct Connection {
@@ -262,7 +250,7 @@ impl Connection {
         Connection {
             bandwidth,
             flow: 0,
-            stability: 0.95,
+            stability: thread_rng().gen_range(0.9..1.),
         }
     }
 }
@@ -277,3 +265,99 @@ impl Clone for Connection {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn monte_carlo() {
+        let (mut graph,mut nodes,mut intensity) = init_graph();
+
+        info!("{}", "Experiment monte carlo".yellow());
+        let mut graph = graph.clone();
+        let mut data = vec![];
+        let mut failed = 0;
+        let iterations = 1000;
+        for i in 0..iterations {
+            debug!("Iteration {}", i);
+            let mut graph = graph.clone();
+            random_disconnect(&mut graph);
+            reset_flow(&mut graph);
+            let res = set_flow(&mut graph, &nodes, &intensity);
+            let t = test_network(&graph, &intensity);
+            if res {
+                data.push(t);
+            } else {
+                failed += 1;
+            }
+        }
+        info!("Finished");
+        info!("Average T value: {}", data.iter().sum::<f64>()/data.len() as f64);
+        info!("Failed attempts: {} / {}", failed, iterations)
+    }
+
+    #[test]
+    fn experiment1() {
+        let (mut graph,mut nodes,mut intensity) = init_graph();
+
+        info!("{}", "Experiment 1".yellow());
+        let mut intensity = intensity.clone();
+        let mut graph = graph.clone();
+        for i in 0..100 {
+            debug!("Iteration {}", i);
+            intensity.mapv_inplace(|x| (x as f64 * 1.05) as usize);
+
+            // let mut graph = graph.clone();
+            // random_disconnect(&mut graph);
+            reset_flow(&mut graph);
+            set_flow(&mut graph, &nodes, &intensity);
+            test_network(&graph, &intensity);
+        }
+        info!("Finished");
+        println!("{}", "NICCCC".red())
+    }
+
+
+    #[test]
+    fn experiment2() {
+        let (mut graph,mut nodes,mut intensity) = init_graph();
+
+        info!("{}", "Experiment 2".yellow());
+        let mut graph = graph.clone();
+        for i in 0..100 {
+            debug!("Iteration {}", i);
+            graph.edge_weights_mut().for_each(|x| x.bandwidth = (x.bandwidth as f64 * 1.05) as usize);
+
+            // let mut graph = graph.clone();
+            // random_disconnect(&mut graph);
+            reset_flow(&mut graph);
+            set_flow(&mut graph, &nodes, &intensity);
+            test_network(&graph, &intensity);
+        }
+        info!("Finished");
+    }
+
+    #[test]
+    fn experiment3() {
+        let (mut graph,mut nodes,mut intensity) = init_graph();
+
+        info!("{}", "Experiment 3".yellow());
+        let mut graph = graph.clone();
+        let average = graph.edge_references().fold(0., |acc, x| acc + x.weight().bandwidth as f64) / graph.edge_count() as f64;
+        let mut rng = rand::thread_rng();
+        let range = Uniform::new(0, NODES);
+        for i in 0..20 {
+            debug!("Iteration {}", i);
+            graph.add_edge(nodes[range.sample(&mut rng)], nodes[range.sample(&mut rng)], Connection::new(average as usize));
+
+
+            // let mut graph = graph.clone();
+            // random_disconnect(&mut graph);
+            reset_flow(&mut graph);
+            set_flow(&mut graph, &nodes, &intensity);
+            test_network(&graph, &intensity);
+        }
+        info!("Finished");
+    }
+
+}
