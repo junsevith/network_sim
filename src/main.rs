@@ -1,5 +1,5 @@
 use colored::Colorize;
-use log::{debug, error, info, LevelFilter, trace, warn};
+use log::{debug, info, LevelFilter, trace, warn};
 use ndarray::{Array2, ArrayBase, Ix2, OwnedRepr};
 use petgraph::algo::astar;
 use petgraph::prelude::{EdgeRef, NodeIndex, StableGraph, StableUnGraph};
@@ -46,7 +46,6 @@ fn main() {
     // test_network(&graph, &intensity);
 }
 
-
 fn init_graph() -> (StableGraph<u8, Connection, Undirected>, Vec<NodeIndex>, ArrayBase<OwnedRepr<usize>, Ix2>) {
     let _ = env_logger::builder().filter_level(LevelFilter::Debug).is_test(true).try_init();
     // let mut intensity = [[0usize; NODES]; NODES];
@@ -70,7 +69,7 @@ fn init_graph() -> (StableGraph<u8, Connection, Undirected>, Vec<NodeIndex>, Arr
 
 
 fn random_disconnect(graph: &mut StableGraph<u8, Connection, Undirected>) {
-    let mut rng = rand::thread_rng();
+    let mut rng = thread_rng();
     let range = Uniform::new(0., 1.);
 
     for i in graph.edge_indices().collect::<Vec<_>>() {
@@ -142,7 +141,7 @@ fn set_edges(graph: &mut StableUnGraph<u8, Connection>, nodes: &Vec<NodeIndex>) 
 }
 
 fn set_edges2(graph: &mut StableUnGraph<u8, Connection>, nodes: &Vec<NodeIndex>) {
-    let mut rng = rand::thread_rng();
+    let mut rng = thread_rng();
     let node_range = Uniform::new(0, NODES);
     let bandwidth_range = Uniform::new(1000, 10000);
     for i in 0..NODES {
@@ -271,10 +270,10 @@ mod tests {
 
     #[test]
     fn monte_carlo() {
-        let (mut graph,mut nodes,mut intensity) = init_graph();
+        let (graph,nodes,intensity) = init_graph();
 
         info!("{}", "Experiment monte carlo".yellow());
-        let mut graph = graph.clone();
+        let graph = graph.clone();
         let mut data = vec![];
         let mut failed = 0;
         let iterations = 1000;
@@ -298,7 +297,7 @@ mod tests {
 
     #[test]
     fn experiment1() {
-        let (mut graph,mut nodes,mut intensity) = init_graph();
+        let (graph,nodes,intensity) = init_graph();
 
         info!("{}", "Experiment 1".yellow());
         let mut intensity = intensity.clone();
@@ -314,13 +313,12 @@ mod tests {
             test_network(&graph, &intensity);
         }
         info!("Finished");
-        println!("{}", "NICCCC".red())
     }
 
 
     #[test]
     fn experiment2() {
-        let (mut graph,mut nodes,mut intensity) = init_graph();
+        let (graph,nodes,intensity) = init_graph();
 
         info!("{}", "Experiment 2".yellow());
         let mut graph = graph.clone();
@@ -339,12 +337,12 @@ mod tests {
 
     #[test]
     fn experiment3() {
-        let (mut graph,mut nodes,mut intensity) = init_graph();
+        let (graph,nodes,intensity) = init_graph();
 
         info!("{}", "Experiment 3".yellow());
         let mut graph = graph.clone();
         let average = graph.edge_references().fold(0., |acc, x| acc + x.weight().bandwidth as f64) / graph.edge_count() as f64;
-        let mut rng = rand::thread_rng();
+        let mut rng = thread_rng();
         let range = Uniform::new(0, NODES);
         for i in 0..20 {
             debug!("Iteration {}", i);
